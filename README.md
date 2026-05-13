@@ -41,6 +41,88 @@
 
 ## 服务 API 文档
 
+### 科研绘图后台接口
+
+第一版链路：兑换券码或分享链接得到 `accessToken`，上传 TXT/CSV/XLSX 创建异步作图任务，轮询任务状态，成功后用资源 URL 展示 PNG。
+
+#### 初始化数据库
+
+执行 `src/main/resources/db.sql`。脚本会创建用户、券码、分享链接、作图权益、上传文件、作图任务、结果资源等表，并写入演示数据：
+
+- 券码：`SCIDRAW-DEMO`
+- 分享 token：`share-demo-token`
+
+#### 兑换券码
+
+`POST /api/plot/coupons/redeem`
+
+```json
+{
+  "userKey": "wechat-openid-or-dev-user",
+  "couponCode": "SCIDRAW-DEMO"
+}
+```
+
+返回 `accessToken`、总次数、剩余次数和过期时间。
+
+#### 兑换分享链接
+
+`POST /api/plot/share/validate`
+
+```json
+{
+  "userKey": "wechat-openid-or-dev-user",
+  "shareToken": "share-demo-token"
+}
+```
+
+#### 上传文件并创建任务
+
+`POST /api/plot/tasks`
+
+表单字段：
+
+- `userKey`：用户标识，第一版可用微信 openid
+- `accessToken`：券码或分享链接兑换得到的权益凭证
+- `plotType`：默认 `volcano`
+- `outputFormat`：默认 `png`
+- `options`：JSON 字符串，默认 `{}`
+- `file`：TXT、CSV、XLSX 文件
+
+成功后立即返回 `taskId` 和解析摘要，任务状态为 `PENDING`，后台异步执行 R 脚本。
+
+#### 查询任务状态
+
+`GET /api/plot/tasks/{taskId}`
+
+返回任务状态、进度、错误信息和结果资源列表。状态包括 `PENDING`、`RUNNING`、`SUCCESS`、`FAILED`。
+
+#### 查询历史记录
+
+`GET /api/plot/tasks?userKey=wechat-openid-or-dev-user&limit=20`
+
+#### 获取图片结果
+
+`GET /api/plot/resources/{resourceId}`
+
+返回 PNG 图片资源。
+
+#### R 脚本配置
+
+默认调用：
+
+```bash
+Rscript scripts/plot_volcano.R --input /path/input.normalized.csv --output /path/result.png --options /path/options.json
+```
+
+可通过环境变量覆盖：
+
+- `SCIDRAW_STORAGE_ROOT`
+- `SCIDRAW_MAX_UPLOAD_SIZE_BYTES`
+- `SCIDRAW_RSCRIPT_BINARY`
+- `SCIDRAW_RSCRIPT_TIMEOUT_SECONDS`
+- `SCIDRAW_SCRIPT_VOLCANO`
+
 ### `GET /api/count`
 
 获取当前计数
