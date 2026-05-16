@@ -48,18 +48,38 @@ if (nrow(data) == 0 || ncol(data) < 2) {
   stop("热图至少需要两列且包含数据行", call. = FALSE)
 }
 
-numeric_columns <- names(data)[vapply(data, function(column) {
+if (all(c("marker", "group", "value") %in% names(data))) {
+  data$value <- suppressWarnings(as.numeric(data$value))
+  data <- data[!is.na(data$value) & data$marker != "" & data$group != "", , drop = FALSE]
+  if (nrow(data) < 2) {
+    stop("热图可用数值数据太少", call. = FALSE)
+  }
+  markers <- unique(data$marker)
+  groups <- unique(data$group)
+  matrix_data <- matrix(NA_real_, nrow = length(markers), ncol = length(groups), dimnames = list(markers, groups))
+  for (marker in markers) {
+    for (group in groups) {
+      selected <- data$marker == marker & data$group == group
+      if (any(selected)) {
+        matrix_data[marker, group] <- mean(data$value[selected], na.rm = TRUE)
+      }
+    }
+  }
+  matrix_data[is.na(matrix_data)] <- 0
+} else {
+  numeric_columns <- names(data)[vapply(data, function(column) {
   values <- suppressWarnings(as.numeric(column))
   sum(!is.na(values)) >= max(1, floor(length(values) * 0.6))
-}, logical(1))]
+  }, logical(1))]
 
-if (length(numeric_columns) < 2) {
-  stop("热图需要至少两列数值字段", call. = FALSE)
+  if (length(numeric_columns) < 2) {
+    stop("热图需要至少两列数值字段", call. = FALSE)
+  }
+
+  matrix_data <- as.matrix(data[, numeric_columns, drop = FALSE])
+  storage.mode(matrix_data) <- "numeric"
+  matrix_data <- matrix_data[stats::complete.cases(matrix_data), , drop = FALSE]
 }
-
-matrix_data <- as.matrix(data[, numeric_columns, drop = FALSE])
-storage.mode(matrix_data) <- "numeric"
-matrix_data <- matrix_data[stats::complete.cases(matrix_data), , drop = FALSE]
 
 if (nrow(matrix_data) < 2 || ncol(matrix_data) < 2) {
   stop("热图可用数值数据太少", call. = FALSE)

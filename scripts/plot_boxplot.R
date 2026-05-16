@@ -48,22 +48,28 @@ if (nrow(data) == 0 || ncol(data) < 2) {
   stop("箱线图至少需要两列且包含数据行", call. = FALSE)
 }
 
-numeric_columns <- names(data)[vapply(data, function(column) {
+if (all(c("marker", "group", "value") %in% names(data))) {
+  values <- suppressWarnings(as.numeric(data[["value"]]))
+  groups <- interaction(data[["marker"]], data[["group"]], sep = " / ", drop = TRUE)
+  valid <- !is.na(values) & !is.na(groups) & groups != ""
+} else {
+  numeric_columns <- names(data)[vapply(data, function(column) {
   values <- suppressWarnings(as.numeric(column))
   sum(!is.na(values)) >= max(1, floor(length(values) * 0.6))
-}, logical(1))]
+  }, logical(1))]
 
-if (length(numeric_columns) < 1) {
-  stop("箱线图需要至少一列数值字段", call. = FALSE)
+  if (length(numeric_columns) < 1) {
+    stop("箱线图需要至少一列数值字段", call. = FALSE)
+  }
+
+  value_column <- numeric_columns[1]
+  group_candidates <- setdiff(names(data), numeric_columns)
+  group_column <- if (length(group_candidates) > 0) group_candidates[1] else names(data)[1]
+
+  values <- suppressWarnings(as.numeric(data[[value_column]]))
+  groups <- as.factor(if (group_column == value_column) "All" else data[[group_column]])
+  valid <- !is.na(values) & !is.na(groups) & groups != ""
 }
-
-value_column <- numeric_columns[1]
-group_candidates <- setdiff(names(data), numeric_columns)
-group_column <- if (length(group_candidates) > 0) group_candidates[1] else names(data)[1]
-
-values <- suppressWarnings(as.numeric(data[[value_column]]))
-groups <- as.factor(if (group_column == value_column) "All" else data[[group_column]])
-valid <- !is.na(values) & !is.na(groups) & groups != ""
 
 if (sum(valid) < 2) {
   stop("箱线图可用数据太少", call. = FALSE)
@@ -84,8 +90,8 @@ par(mar = c(7, 5, 4, 2))
 boxplot(
   values ~ groups,
   col = rep(colors, length.out = nlevels(groups)),
-  xlab = group_column,
-  ylab = value_column,
+  xlab = "Group",
+  ylab = "Value",
   main = "SciDraw Boxplot",
   las = 2,
   outline = TRUE

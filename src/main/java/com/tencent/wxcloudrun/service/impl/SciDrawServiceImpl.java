@@ -6,6 +6,7 @@ import com.tencent.wxcloudrun.dao.*;
 import com.tencent.wxcloudrun.dto.AccessResponse;
 import com.tencent.wxcloudrun.dto.CreateTaskResponse;
 import com.tencent.wxcloudrun.dto.TaskDetailResponse;
+import com.tencent.wxcloudrun.dto.UploadFileResponse;
 import com.tencent.wxcloudrun.model.*;
 import com.tencent.wxcloudrun.service.FileParseResult;
 import com.tencent.wxcloudrun.service.SciDrawService;
@@ -24,7 +25,7 @@ import java.util.*;
 
 @Service
 public class SciDrawServiceImpl implements SciDrawService {
-  private static final Set<String> ALLOWED_EXTENSIONS = new HashSet<String>(Arrays.asList("txt", "csv", "xlsx"));
+  private static final Set<String> ALLOWED_EXTENSIONS = new HashSet<String>(Arrays.asList("txt", "csv", "xls", "xlsx"));
   private static final Set<String> SUPPORTED_PLOT_TYPES = new HashSet<String>(Arrays.asList("volcano", "heatmap", "survival", "boxplot"));
   private static final Set<String> SUPPORTED_OUTPUT_FORMATS = new HashSet<String>(Collections.singletonList("png"));
 
@@ -82,53 +83,65 @@ public class SciDrawServiceImpl implements SciDrawService {
 
   @Override
   @Transactional
-  public CreateTaskResponse createTask(String userKey, String accessToken, MultipartFile file, String plotType, String outputFormat, String optionsJson) {
+  public UploadFileResponse uploadFile(String userKey, MultipartFile file) {
     try {
       SciUser user = ensureUser(userKey);
+      UploadedFile upload = saveUploadedFile(user, file, null);
+      return new UploadFileResponse(upload.getId(), objectMapper.readValue(upload.getParseSummary(), Object.class));
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new IllegalStateException(ex.getMessage(), ex);
+    }
+  }
+
+  @Override
+  @Transactional
+  public CreateTaskResponse createTaskFromUpload(String userKey, String accessToken, Long uploadId, String plotType, String outputFormat, String optionsJson) {
+    try {
+      SciUser user = ensureUser(userKey);
+      UploadedFile upload = uploadedFileMapper.findById(required(uploadId, "uploadId 不能为空"));
+      if (upload == null || !upload.getUserId().equals(user.getId())) {
+        throw new IllegalArgumentException("上传文件不存在");
+      }
+      if (!"SUCCESS".equals(upload.getParseStatus())) {
+        throw new IllegalArgumentException("上传文件尚未解析成功");
+      }
       PlotAccess access = accessMapper.findByToken(required(accessToken, "accessToken 不能为空"));
       if (access == null || !access.getUserId().equals(user.getId())) {
         throw new IllegalArgumentException("作图权益无效");
       }
-      validateUpload(file);
       if (accessMapper.consumeOne(accessToken, user.getId()) != 1) {
         throw new IllegalArgumentException("作图权益已过期或剩余次数不足");
       }
 
-      String ext = extension(file.getOriginalFilename());
-      PlotTask task = new PlotTask();
-      task.setUserId(user.getId());
-      task.setAccessId(access.getId());
-      task.setPlotType(normalizePlotType(plotType));
-      task.setOutputFormat(normalizeOutputFormat(outputFormat));
-      task.setStatus("PENDING");
-      task.setProgress(0);
-      task.setOptionsJson(normalizeOptions(optionsJson));
-      taskMapper.insert(task);
-
-      Path inputPath = storageService.uploadPath(user.getId(), task.getId(), "input." + ext);
-      file.transferTo(inputPath.toFile());
-      Path normalizedPath = storageService.uploadPath(user.getId(), task.getId(), "input.normalized.csv");
-      FileParseResult parseResult = fileParserService.parse(inputPath, ext, normalizedPath);
-      String summaryJson = objectMapper.writeValueAsString(parseResult.getSummary());
-
-      UploadedFile upload = new UploadedFile();
-      upload.setUserId(user.getId());
-      upload.setTaskId(task.getId());
-      upload.setOriginalName(file.getOriginalFilename());
-      upload.setExtension(ext);
-      upload.setMimeType(file.getContentType());
-      upload.setSizeBytes(file.getSize());
-      upload.setStoragePath(inputPath.toString());
-      upload.setNormalizedPath(normalizedPath.toString());
-      upload.setParseStatus("SUCCESS");
-      upload.setParseSummary(summaryJson);
-      uploadedFileMapper.insert(upload);
-
-      task.setUploadFileId(upload.getId());
-      task.setParseSummary(summaryJson);
-      taskMapper.attachUpload(task);
+      PlotTask task = createPendingTask(user, access, upload, plotType, outputFormat, optionsJson);
       scheduleTask(task.getId());
-      return new CreateTaskResponse(task.getId(), "PENDING", parseResult.getSummary());
+      return new CreateTaskResponse(task.getId(), "PENDING", objectMapper.readValue(upload.getParseSummary(), Object.class));
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new IllegalStateException(ex.getMessage(), ex);
+    }
+  }
+
+  @Override
+  @Transactional
+  public CreateTaskResponse createTask(String userKey, String accessToken, MultipartFile file, String plotType, String outputFormat, String optionsJson) {
+    try {
+      SciUser user = ensureUser(userKey);
+      UploadedFile upload = saveUploadedFile(user, file, null);
+      PlotAccess access = accessMapper.findByToken(required(accessToken, "accessToken 不能为空"));
+      if (access == null || !access.getUserId().equals(user.getId())) {
+        throw new IllegalArgumentException("作图权益无效");
+      }
+      if (accessMapper.consumeOne(accessToken, user.getId()) != 1) {
+        throw new IllegalArgumentException("作图权益已过期或剩余次数不足");
+      }
+
+      PlotTask task = createPendingTask(user, access, upload, plotType, outputFormat, optionsJson);
+      scheduleTask(task.getId());
+      return new CreateTaskResponse(task.getId(), "PENDING", objectMapper.readValue(upload.getParseSummary(), Object.class));
     } catch (RuntimeException ex) {
       throw ex;
     } catch (Exception ex) {
@@ -205,7 +218,7 @@ public class SciDrawServiceImpl implements SciDrawService {
     }
     String ext = extension(file.getOriginalFilename());
     if (!ALLOWED_EXTENSIONS.contains(ext)) {
-      throw new IllegalArgumentException("仅支持 TXT、CSV、XLSX 文件");
+      throw new IllegalArgumentException("仅支持 TXT、CSV、XLS、XLSX 文件");
     }
     String contentType = file.getContentType();
     if (contentType != null && contentType.toLowerCase().contains("image")) {
@@ -225,6 +238,53 @@ public class SciDrawServiceImpl implements SciDrawService {
       throw new IllegalArgumentException(message);
     }
     return value.trim();
+  }
+
+  private Long required(Long value, String message) {
+    if (value == null) {
+      throw new IllegalArgumentException(message);
+    }
+    return value;
+  }
+
+  private UploadedFile saveUploadedFile(SciUser user, MultipartFile file, Long taskId) throws Exception {
+    validateUpload(file);
+    String ext = extension(file.getOriginalFilename());
+    String uploadKey = taskId == null ? UUID.randomUUID().toString().replace("-", "") : String.valueOf(taskId);
+    Path inputPath = storageService.uploadPath(user.getId(), uploadKey, "input." + ext);
+    file.transferTo(inputPath.toFile());
+    Path normalizedPath = storageService.uploadPath(user.getId(), uploadKey, "input.normalized.csv");
+    FileParseResult parseResult = fileParserService.parse(inputPath, ext, normalizedPath);
+    String summaryJson = objectMapper.writeValueAsString(parseResult.getSummary());
+
+    UploadedFile upload = new UploadedFile();
+    upload.setUserId(user.getId());
+    upload.setTaskId(taskId);
+    upload.setOriginalName(file.getOriginalFilename());
+    upload.setExtension(ext);
+    upload.setMimeType(file.getContentType());
+    upload.setSizeBytes(file.getSize());
+    upload.setStoragePath(inputPath.toString());
+    upload.setNormalizedPath(normalizedPath.toString());
+    upload.setParseStatus("SUCCESS");
+    upload.setParseSummary(summaryJson);
+    uploadedFileMapper.insert(upload);
+    return upload;
+  }
+
+  private PlotTask createPendingTask(SciUser user, PlotAccess access, UploadedFile upload, String plotType, String outputFormat, String optionsJson) throws Exception {
+    PlotTask task = new PlotTask();
+    task.setUserId(user.getId());
+    task.setAccessId(access.getId());
+    task.setUploadFileId(upload.getId());
+    task.setPlotType(normalizePlotType(plotType));
+    task.setOutputFormat(normalizeOutputFormat(outputFormat));
+    task.setStatus("PENDING");
+    task.setProgress(0);
+    task.setOptionsJson(normalizeOptions(optionsJson));
+    task.setParseSummary(upload.getParseSummary());
+    taskMapper.insert(task);
+    return task;
   }
 
   private String emptyToDefault(String value, String defaultValue) {

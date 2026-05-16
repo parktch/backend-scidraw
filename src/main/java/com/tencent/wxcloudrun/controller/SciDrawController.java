@@ -1,6 +1,7 @@
 package com.tencent.wxcloudrun.controller;
 
 import com.tencent.wxcloudrun.config.ApiResponse;
+import com.tencent.wxcloudrun.dto.CreateTaskFromUploadRequest;
 import com.tencent.wxcloudrun.dto.RedeemCouponRequest;
 import com.tencent.wxcloudrun.dto.ShareTokenRequest;
 import com.tencent.wxcloudrun.model.PlotResultResource;
@@ -39,6 +40,23 @@ public class SciDrawController {
                                 @RequestParam(value = "options", required = false) String optionsJson,
                                 @RequestPart("file") MultipartFile file) {
     return ApiResponse.ok(sciDrawService.createTask(userKey, accessToken, file, plotType, outputFormat, optionsJson));
+  }
+
+  @PostMapping("/uploads")
+  public ApiResponse uploadFile(@RequestParam("userKey") String userKey,
+                                @RequestPart("file") MultipartFile file) {
+    return ApiResponse.ok(sciDrawService.uploadFile(userKey, file));
+  }
+
+  @PostMapping("/tasks/from-upload")
+  public ApiResponse createTaskFromUpload(@RequestBody CreateTaskFromUploadRequest request) {
+    return ApiResponse.ok(sciDrawService.createTaskFromUpload(
+        request.getUserKey(),
+        request.getAccessToken(),
+        request.getUploadId(),
+        request.getPlotType(),
+        request.getOutputFormat(),
+        request.getOptions()));
   }
 
   @GetMapping("/tasks/{taskId}")

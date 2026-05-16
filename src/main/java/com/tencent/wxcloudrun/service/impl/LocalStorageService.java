@@ -22,6 +22,12 @@ public class LocalStorageService {
     return dir.resolve(filename);
   }
 
+  public Path uploadPath(Long userId, String uploadKey, String filename) throws IOException {
+    Path dir = Paths.get(properties.getStorageRoot(), "uploads", String.valueOf(userId), uploadKey);
+    Files.createDirectories(dir);
+    return dir.resolve(filename);
+  }
+
   public Path taskPath(Long taskId, String filename) throws IOException {
     Path dir = Paths.get(properties.getStorageRoot(), "tasks", String.valueOf(taskId));
     Files.createDirectories(dir);

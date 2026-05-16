@@ -43,7 +43,7 @@
 
 ### 科研绘图后台接口
 
-第一版链路：兑换券码或分享链接得到 `accessToken`，上传 TXT/CSV/XLSX 创建异步作图任务，轮询任务状态，成功后用资源 URL 展示 PNG。
+第一版链路：兑换券码或分享链接得到 `accessToken`，上传 TXT/CSV/XLS/XLSX 解析数据，用户确认后创建异步作图任务，轮询任务状态，成功后用资源 URL 展示 PNG。
 
 #### 初始化数据库
 
@@ -76,7 +76,35 @@
 }
 ```
 
-#### 上传文件并创建任务
+#### 上传文件并解析
+
+`POST /api/plot/uploads`
+
+表单字段：
+
+- `userKey`：用户标识，第一版可用微信 openid
+- `file`：TXT、CSV、XLS、XLSX 文件
+
+返回 `uploadId` 和解析摘要。对于 `1.xls` 这种分块格式，会标准化为 `marker, group, replicate, value`，并返回识别出的指标、分组、缺失值数量等信息。
+
+#### 根据已上传文件创建任务
+
+`POST /api/plot/tasks/from-upload`
+
+```json
+{
+  "userKey": "wechat-openid-or-dev-user",
+  "accessToken": "兑换得到的权益凭证",
+  "uploadId": 1,
+  "plotType": "boxplot",
+  "outputFormat": "png",
+  "options": "{\"palette\":\"blue\"}"
+}
+```
+
+成功后立即返回 `taskId` 和解析摘要，任务状态为 `PENDING`，后台异步执行 R 脚本。
+
+#### 上传文件并创建任务（兼容旧接口）
 
 `POST /api/plot/tasks`
 
@@ -87,7 +115,7 @@
 - `plotType`：默认 `volcano`，支持小程序中的 `volcano`、`heatmap`、`survival`、`boxplot`
 - `outputFormat`：默认 `png`
 - `options`：JSON 字符串，默认 `{}`
-- `file`：TXT、CSV、XLSX 文件
+- `file`：TXT、CSV、XLS、XLSX 文件
 
 成功后立即返回 `taskId` 和解析摘要，任务状态为 `PENDING`，后台异步执行 R 脚本。
 
