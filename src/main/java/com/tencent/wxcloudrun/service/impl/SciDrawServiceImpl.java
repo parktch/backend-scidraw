@@ -25,6 +25,8 @@ import java.util.*;
 @Service
 public class SciDrawServiceImpl implements SciDrawService {
   private static final Set<String> ALLOWED_EXTENSIONS = new HashSet<String>(Arrays.asList("txt", "csv", "xlsx"));
+  private static final Set<String> SUPPORTED_PLOT_TYPES = new HashSet<String>(Arrays.asList("volcano", "heatmap", "survival", "boxplot"));
+  private static final Set<String> SUPPORTED_OUTPUT_FORMATS = new HashSet<String>(Collections.singletonList("png"));
 
   private final SciUserMapper userMapper;
   private final CouponCodeMapper couponCodeMapper;
@@ -96,8 +98,8 @@ public class SciDrawServiceImpl implements SciDrawService {
       PlotTask task = new PlotTask();
       task.setUserId(user.getId());
       task.setAccessId(access.getId());
-      task.setPlotType(emptyToDefault(plotType, "volcano"));
-      task.setOutputFormat(emptyToDefault(outputFormat, "png"));
+      task.setPlotType(normalizePlotType(plotType));
+      task.setOutputFormat(normalizeOutputFormat(outputFormat));
       task.setStatus("PENDING");
       task.setProgress(0);
       task.setOptionsJson(normalizeOptions(optionsJson));
@@ -233,6 +235,22 @@ public class SciDrawServiceImpl implements SciDrawService {
     String options = emptyToDefault(optionsJson, "{}");
     objectMapper.readTree(options);
     return options;
+  }
+
+  private String normalizePlotType(String plotType) {
+    String value = emptyToDefault(plotType, "volcano").toLowerCase(Locale.ROOT);
+    if (!SUPPORTED_PLOT_TYPES.contains(value)) {
+      throw new IllegalArgumentException("暂不支持该作图类型");
+    }
+    return value;
+  }
+
+  private String normalizeOutputFormat(String outputFormat) {
+    String value = emptyToDefault(outputFormat, "png").toLowerCase(Locale.ROOT);
+    if (!SUPPORTED_OUTPUT_FORMATS.contains(value)) {
+      throw new IllegalArgumentException("暂仅支持 PNG 输出");
+    }
+    return value;
   }
 
   private void scheduleTask(final Long taskId) {

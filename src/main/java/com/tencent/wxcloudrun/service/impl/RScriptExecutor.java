@@ -24,7 +24,7 @@ public class RScriptExecutor {
   public void run(String plotType, Path input, Path output, Path options, Path workDir) throws IOException, InterruptedException {
     String script = properties.getScripts().get(plotType);
     if (script == null || script.trim().isEmpty()) {
-      script = properties.getScripts().get("volcano");
+      throw new IllegalArgumentException("未配置作图脚本: " + plotType);
     }
     List<String> command = Arrays.asList(
         properties.getRscriptBinary(),

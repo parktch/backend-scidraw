@@ -28,3 +28,6 @@ scidraw:
   rscript-timeout-seconds: ${SCIDRAW_RSCRIPT_TIMEOUT_SECONDS:60}
   scripts:
     volcano: ${SCIDRAW_SCRIPT_VOLCANO:scripts/plot_volcano.R}
+    heatmap: ${SCIDRAW_SCRIPT_HEATMAP:scripts/plot_heatmap.R}
+    survival: ${SCIDRAW_SCRIPT_SURVIVAL:scripts/plot_survival.R}
+    boxplot: ${SCIDRAW_SCRIPT_BOXPLOT:scripts/plot_boxplot.R}

@@ -84,7 +84,7 @@
 
 - `userKey`：用户标识，第一版可用微信 openid
 - `accessToken`：券码或分享链接兑换得到的权益凭证
-- `plotType`：默认 `volcano`
+- `plotType`：默认 `volcano`，支持小程序中的 `volcano`、`heatmap`、`survival`、`boxplot`
 - `outputFormat`：默认 `png`
 - `options`：JSON 字符串，默认 `{}`
 - `file`：TXT、CSV、XLSX 文件
@@ -122,6 +122,9 @@ Rscript scripts/plot_volcano.R --input /path/input.normalized.csv --output /path
 - `SCIDRAW_RSCRIPT_BINARY`
 - `SCIDRAW_RSCRIPT_TIMEOUT_SECONDS`
 - `SCIDRAW_SCRIPT_VOLCANO`
+- `SCIDRAW_SCRIPT_HEATMAP`
+- `SCIDRAW_SCRIPT_SURVIVAL`
+- `SCIDRAW_SCRIPT_BOXPLOT`
 
 ### `GET /api/count`
 
