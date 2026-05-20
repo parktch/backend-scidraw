@@ -83,10 +83,25 @@ public class SciDrawServiceImpl implements SciDrawService {
 
   @Override
   @Transactional
-  public UploadFileResponse uploadFile(String userKey, MultipartFile file) {
+  public UploadFileResponse uploadFile(String userKey, String originalName, MultipartFile file) {
     try {
       SciUser user = ensureUser(userKey);
-      UploadedFile upload = saveUploadedFile(user, file, null);
+      UploadedFile upload = saveUploadedFile(user, file, originalName, null);
+      return new UploadFileResponse(upload.getId(), objectMapper.readValue(upload.getParseSummary(), Object.class));
+    } catch (RuntimeException ex) {
+      throw ex;
+    } catch (Exception ex) {
+      throw new IllegalStateException(ex.getMessage(), ex);
+    }
+  }
+
+  @Override
+  @Transactional
+  public UploadFileResponse uploadFileBase64(String userKey, String originalName, String contentType, String contentBase64) {
+    try {
+      SciUser user = ensureUser(userKey);
+      byte[] content = decodeBase64(contentBase64);
+      UploadedFile upload = saveUploadedFile(user, resolvedOriginalName(originalName), contentType, content, null);
       return new UploadFileResponse(upload.getId(), objectMapper.readValue(upload.getParseSummary(), Object.class));
     } catch (RuntimeException ex) {
       throw ex;
@@ -130,7 +145,7 @@ public class SciDrawServiceImpl implements SciDrawService {
   public CreateTaskResponse createTask(String userKey, String accessToken, MultipartFile file, String plotType, String outputFormat, String optionsJson) {
     try {
       SciUser user = ensureUser(userKey);
-      UploadedFile upload = saveUploadedFile(user, file, null);
+      UploadedFile upload = saveUploadedFile(user, file, null, null);
       PlotAccess access = accessMapper.findByToken(required(accessToken, "accessToken 不能为空"));
       if (access == null || !access.getUserId().equals(user.getId())) {
         throw new IllegalArgumentException("作图权益无效");
@@ -209,20 +224,39 @@ public class SciDrawServiceImpl implements SciDrawService {
     return user;
   }
 
-  private void validateUpload(MultipartFile file) throws Exception {
+  private void validateUpload(MultipartFile file, String originalName) throws Exception {
     if (file == null || file.isEmpty()) {
       throw new IllegalArgumentException("上传文件为空");
     }
-    if (file.getSize() > properties.getMaxUploadSizeBytes()) {
+    validateUploadContent(originalName(file, originalName), file.getContentType(), file.getSize());
+  }
+
+  private void validateUploadContent(String originalName, String contentType, long sizeBytes) {
+    if (sizeBytes <= 0) {
+      throw new IllegalArgumentException("上传文件为空");
+    }
+    if (sizeBytes > properties.getMaxUploadSizeBytes()) {
       throw new IllegalArgumentException("文件超过大小限制");
     }
-    String ext = extension(file.getOriginalFilename());
+    String ext = extension(originalName);
     if (!ALLOWED_EXTENSIONS.contains(ext)) {
       throw new IllegalArgumentException("仅支持 TXT、CSV、XLS、XLSX 文件");
     }
-    String contentType = file.getContentType();
     if (contentType != null && contentType.toLowerCase().contains("image")) {
       throw new IllegalArgumentException("文件 MIME 类型不正确");
+    }
+  }
+
+  private byte[] decodeBase64(String contentBase64) {
+    String value = required(contentBase64, "文件内容不能为空");
+    int commaIndex = value.indexOf(',');
+    if (value.startsWith("data:") && commaIndex >= 0) {
+      value = value.substring(commaIndex + 1);
+    }
+    try {
+      return Base64.getDecoder().decode(value);
+    } catch (IllegalArgumentException ex) {
+      throw new IllegalArgumentException("文件内容不是有效的 Base64");
     }
   }
 
@@ -231,6 +265,20 @@ public class SciDrawServiceImpl implements SciDrawService {
       throw new IllegalArgumentException("文件缺少扩展名");
     }
     return filename.substring(filename.lastIndexOf('.') + 1).toLowerCase();
+  }
+
+  private String originalName(MultipartFile file, String originalName) {
+    if (originalName != null && !originalName.trim().isEmpty()) {
+      return originalName.trim();
+    }
+    return file == null ? null : file.getOriginalFilename();
+  }
+
+  private String resolvedOriginalName(String originalName) {
+    if (originalName != null && !originalName.trim().isEmpty()) {
+      return originalName.trim();
+    }
+    throw new IllegalArgumentException("文件缺少扩展名");
   }
 
   private String required(String value, String message) {
@@ -247,9 +295,10 @@ public class SciDrawServiceImpl implements SciDrawService {
     return value;
   }
 
-  private UploadedFile saveUploadedFile(SciUser user, MultipartFile file, Long taskId) throws Exception {
-    validateUpload(file);
-    String ext = extension(file.getOriginalFilename());
+  private UploadedFile saveUploadedFile(SciUser user, MultipartFile file, String originalName, Long taskId) throws Exception {
+    String resolvedOriginalName = originalName(file, originalName);
+    validateUpload(file, resolvedOriginalName);
+    String ext = extension(resolvedOriginalName);
     String uploadKey = taskId == null ? UUID.randomUUID().toString().replace("-", "") : String.valueOf(taskId);
     Path inputPath = storageService.uploadPath(user.getId(), uploadKey, "input." + ext);
     file.transferTo(inputPath.toFile());
@@ -260,10 +309,35 @@ public class SciDrawServiceImpl implements SciDrawService {
     UploadedFile upload = new UploadedFile();
     upload.setUserId(user.getId());
     upload.setTaskId(taskId);
-    upload.setOriginalName(file.getOriginalFilename());
+    upload.setOriginalName(resolvedOriginalName);
     upload.setExtension(ext);
     upload.setMimeType(file.getContentType());
     upload.setSizeBytes(file.getSize());
+    upload.setStoragePath(inputPath.toString());
+    upload.setNormalizedPath(normalizedPath.toString());
+    upload.setParseStatus("SUCCESS");
+    upload.setParseSummary(summaryJson);
+    uploadedFileMapper.insert(upload);
+    return upload;
+  }
+
+  private UploadedFile saveUploadedFile(SciUser user, String originalName, String contentType, byte[] content, Long taskId) throws Exception {
+    validateUploadContent(originalName, contentType, content == null ? 0 : content.length);
+    String ext = extension(originalName);
+    String uploadKey = taskId == null ? UUID.randomUUID().toString().replace("-", "") : String.valueOf(taskId);
+    Path inputPath = storageService.uploadPath(user.getId(), uploadKey, "input." + ext);
+    Files.write(inputPath, content);
+    Path normalizedPath = storageService.uploadPath(user.getId(), uploadKey, "input.normalized.csv");
+    FileParseResult parseResult = fileParserService.parse(inputPath, ext, normalizedPath);
+    String summaryJson = objectMapper.writeValueAsString(parseResult.getSummary());
+
+    UploadedFile upload = new UploadedFile();
+    upload.setUserId(user.getId());
+    upload.setTaskId(taskId);
+    upload.setOriginalName(originalName);
+    upload.setExtension(ext);
+    upload.setMimeType(contentType);
+    upload.setSizeBytes((long) content.length);
     upload.setStoragePath(inputPath.toString());
     upload.setNormalizedPath(normalizedPath.toString());
     upload.setParseStatus("SUCCESS");

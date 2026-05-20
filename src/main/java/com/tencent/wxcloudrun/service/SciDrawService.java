@@ -14,7 +14,8 @@ import java.util.List;
 public interface SciDrawService {
   AccessResponse redeemCoupon(String userKey, String couponCode);
   AccessResponse redeemShareToken(String userKey, String shareToken);
-  UploadFileResponse uploadFile(String userKey, MultipartFile file);
+  UploadFileResponse uploadFile(String userKey, String originalName, MultipartFile file);
+  UploadFileResponse uploadFileBase64(String userKey, String originalName, String contentType, String contentBase64);
   CreateTaskResponse createTaskFromUpload(String userKey, String accessToken, Long uploadId, String plotType, String outputFormat, String optionsJson);
   CreateTaskResponse createTask(String userKey, String accessToken, MultipartFile file, String plotType, String outputFormat, String optionsJson);
   TaskDetailResponse getTask(Long taskId);

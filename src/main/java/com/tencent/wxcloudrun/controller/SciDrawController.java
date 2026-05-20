@@ -4,6 +4,7 @@ import com.tencent.wxcloudrun.config.ApiResponse;
 import com.tencent.wxcloudrun.dto.CreateTaskFromUploadRequest;
 import com.tencent.wxcloudrun.dto.RedeemCouponRequest;
 import com.tencent.wxcloudrun.dto.ShareTokenRequest;
+import com.tencent.wxcloudrun.dto.UploadFileBase64Request;
 import com.tencent.wxcloudrun.model.PlotResultResource;
 import com.tencent.wxcloudrun.service.SciDrawService;
 import org.springframework.core.io.Resource;
@@ -44,8 +45,18 @@ public class SciDrawController {
 
   @PostMapping("/uploads")
   public ApiResponse uploadFile(@RequestParam("userKey") String userKey,
+                                @RequestParam(value = "originalName", required = false) String originalName,
                                 @RequestPart("file") MultipartFile file) {
-    return ApiResponse.ok(sciDrawService.uploadFile(userKey, file));
+    return ApiResponse.ok(sciDrawService.uploadFile(userKey, originalName, file));
+  }
+
+  @PostMapping("/uploads/base64")
+  public ApiResponse uploadFileBase64(@RequestBody UploadFileBase64Request request) {
+    return ApiResponse.ok(sciDrawService.uploadFileBase64(
+        request.getUserKey(),
+        request.getOriginalName(),
+        request.getContentType(),
+        request.getContentBase64()));
   }
 
   @PostMapping("/tasks/from-upload")
