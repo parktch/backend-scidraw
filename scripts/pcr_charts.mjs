@@ -15,6 +15,8 @@ function parseArgs(argv) {
     if (item === "--input") args.input = argv[++i];
     else if (item === "--output") args.output = argv[++i];
     else if (item === "--out-dir") args.outDir = argv[++i];
+    else if (item === "--options") args.options = argv[++i];
+    else if (item.startsWith("--") && i + 1 < argv.length && !argv[i + 1].startsWith("--")) i += 1;
     else if (!item.startsWith("--")) args.input = item;
   }
   return args;
@@ -111,21 +113,81 @@ function sanitizeName(name) {
 }
 
 async function loadRows(input) {
-  if (input.endsWith(".json")) {
+  const extension = path.extname(input).toLowerCase();
+  if (extension === ".json") {
     const extracted = JSON.parse(await fs.readFile(input, "utf8"));
-    return extracted[0].rows;
+    return rowsFromExtracted(extracted, input);
   }
-  if (input.endsWith(".csv")) {
-    return parseCsv(await fs.readFile(input, "utf8"));
+  if (extension === ".csv" || extension === ".txt" || extension === ".tsv") {
+    return parseDelimited(await fs.readFile(input, "utf8"));
   }
-  const extractor = path.join(scriptDir, "extract_xls_biff.py");
-  const result = spawnSync("python3", [extractor, input], { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 });
-  if (result.status !== 0) throw new Error(result.stderr || `读取 ${input} 失败`);
-  const extracted = JSON.parse(result.stdout);
-  return extracted[0].rows;
+  if (extension === ".xls" || extension === ".xlsx" || extension === ".xlsm") {
+    return loadWorkbookRows(input);
+  }
+  throw new Error(`不支持的输入文件类型: ${extension || "未知"}，请上传 xls/xlsx/csv/txt 文件`);
 }
 
-function parseCsv(text) {
+function rowsFromExtracted(extracted, input) {
+  const sheet = Array.isArray(extracted)
+    ? extracted.find((item) => item && Array.isArray(item.rows))
+    : extracted;
+  if (sheet && Array.isArray(sheet.rows)) {
+    return sheet.rows;
+  }
+  if (Array.isArray(extracted) && extracted.every((row) => Array.isArray(row))) {
+    return extracted;
+  }
+  throw new Error(`未能从 ${input} 读取表格行数据`);
+}
+
+async function loadWorkbookRows(input) {
+  try {
+    const module = await import("xlsx");
+    const XLSX = module.default || module;
+    const workbook = XLSX.readFile(input, { cellDates: false });
+    const sheetName = workbook.SheetNames[0];
+    if (!sheetName) throw new Error("Excel 文件没有可读取的工作表");
+    const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+      header: 1,
+      defval: "",
+      raw: true,
+    });
+    return rows
+      .map((row) => row.map(normalizeCell))
+      .filter((row) => row.some((item) => String(item).trim()));
+  } catch (error) {
+    return loadWorkbookRowsWithLegacyExtractor(input, error);
+  }
+}
+
+function loadWorkbookRowsWithLegacyExtractor(input, cause) {
+  const extractor = path.join(scriptDir, "extract_xls_biff.py");
+  const result = spawnSync("python3", [extractor, input], { encoding: "utf8", maxBuffer: 20 * 1024 * 1024 });
+  if (result.status !== 0) {
+    const reason = [cause.message, result.stderr || result.stdout]
+      .filter(Boolean)
+      .join("\n");
+    throw new Error(reason || `读取 ${input} 失败`);
+  }
+  const extracted = JSON.parse(result.stdout);
+  return rowsFromExtracted(extracted, input);
+}
+
+function normalizeCell(value) {
+  if (value == null) return "";
+  if (value instanceof Date) return value.toISOString();
+  return value;
+}
+
+function detectDelimiter(text) {
+  const firstLine = text.split(/\r?\n/).find((line) => line.trim()) || "";
+  const tabs = (firstLine.match(/\t/g) || []).length;
+  const commas = (firstLine.match(/,/g) || []).length;
+  return tabs > commas ? "\t" : ",";
+}
+
+function parseDelimited(text) {
+  const delimiter = detectDelimiter(text);
   const rows = [];
   let row = [];
   let value = "";
@@ -144,7 +206,7 @@ function parseCsv(text) {
       }
     } else if (char === '"') {
       quoted = true;
-    } else if (char === ",") {
+    } else if (char === delimiter) {
       row.push(value);
       value = "";
     } else if (char === "\n") {
@@ -162,6 +224,12 @@ function parseCsv(text) {
     rows.push(row);
   }
   return rows.filter((items) => items.some((item) => String(item).trim()));
+}
+
+function numericCell(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const number = Number(String(value ?? "").trim());
+  return Number.isFinite(number) ? number : null;
 }
 
 function parseChartData(rows) {
@@ -185,7 +253,7 @@ function parseStandardGroupedFormat(rows) {
   for (const row of rows.slice(1)) {
     const gene = String(row[markerIndex] || "").trim();
     const group = String(row[groupIndex] || "").trim();
-    const value = Number(row[valueIndex]);
+    const value = numericCell(row[valueIndex]);
     if (!gene || !group || !Number.isFinite(value)) continue;
     if (!geneMap.has(gene)) {
       geneMap.set(gene, new Map());
@@ -229,7 +297,9 @@ function parseTwoBlockGeneFormat(rows) {
       if (typeof group !== "string" || !group.trim()) break;
 
       for (const { value: gene, col } of headers) {
-        const values = [dataRow[col], dataRow[col + 1], dataRow[col + 2]].filter((cell) => typeof cell === "number");
+        const values = [dataRow[col], dataRow[col + 1], dataRow[col + 2]]
+          .map(numericCell)
+          .filter((cell) => Number.isFinite(cell));
         if (values.length < 2) continue;
         const geneName = gene.trim();
         const groupName = group.trim();
@@ -298,7 +368,7 @@ function renderChart(data, compact = false) {
   const centerGap = compact ? 86 : 86;
   const firstX = x0 + 34 + barW / 2;
   const xs = stats.map((_, index) => firstX + index * centerGap);
-  const axisEnd = xs.at(-1) + barW / 2 + 24;
+  const axisEnd = xs[xs.length - 1] + barW / 2 + 24;
   const colors = ["#ff2a00", "#1f55ff", "#00d92f", "#ff34d2", "#b27a32"];
   const dotOffsets = [-16, -5, 6, 17, -10, 11];
 
