@@ -265,15 +265,9 @@ function parseStandardGroupedFormat(rows) {
     groupMap.get(group).push(value);
   }
 
-  const preferredGroupOrder = ["M0", "M1", "M2"];
   return geneOrder.map((gene) => {
     const groupMap = geneMap.get(gene);
-    const labels = [...groupMap.keys()].sort((a, b) => {
-      const ai = preferredGroupOrder.indexOf(a);
-      const bi = preferredGroupOrder.indexOf(b);
-      if (ai !== -1 || bi !== -1) return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-      return a.localeCompare(b);
-    });
+    const labels = orderedGroupLabels(groupMap);
     return {
       gene,
       groups: labels.map((label) => ({ label, values: groupMap.get(label) })),
@@ -315,20 +309,22 @@ function parseTwoBlockGeneFormat(rows) {
     }
   }
 
-  const preferredGroupOrder = ["M0", "M1", "M2"];
   return geneOrder.map((gene) => {
     const groupMap = geneMap.get(gene);
-    const labels = [...groupMap.keys()].sort((a, b) => {
-      const ai = preferredGroupOrder.indexOf(a);
-      const bi = preferredGroupOrder.indexOf(b);
-      if (ai !== -1 || bi !== -1) return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
-      return a.localeCompare(b);
-    });
+    const labels = orderedGroupLabels(groupMap);
     return {
       gene,
       groups: labels.map((label) => ({ label, values: groupMap.get(label) })),
     };
   });
+}
+
+function orderedGroupLabels(groupMap) {
+  const labels = [...groupMap.keys()];
+  const preferredGroupOrder = ["M0", "M1", "M2"];
+  const allPreferred = labels.every((label) => preferredGroupOrder.includes(label));
+  if (!allPreferred) return labels;
+  return labels.sort((a, b) => preferredGroupOrder.indexOf(a) - preferredGroupOrder.indexOf(b));
 }
 
 function niceYMax(maxValue) {
