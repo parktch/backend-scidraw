@@ -3,6 +3,7 @@ package com.tencent.wxcloudrun.controller;
 import com.tencent.wxcloudrun.config.ApiResponse;
 import com.tencent.wxcloudrun.dto.CreateTaskFromUploadRequest;
 import com.tencent.wxcloudrun.dto.RedeemCouponRequest;
+import com.tencent.wxcloudrun.dto.ResourceBase64Response;
 import com.tencent.wxcloudrun.dto.ShareTokenRequest;
 import com.tencent.wxcloudrun.dto.UploadFileBase64Request;
 import com.tencent.wxcloudrun.model.PlotResultResource;
@@ -13,6 +14,10 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+
+import java.nio.file.Files;
+import java.nio.file.Paths;
+import java.util.Base64;
 
 @RestController
 @RequestMapping("/api/plot")
@@ -89,6 +94,18 @@ public class SciDrawController {
         .contentType(MediaType.IMAGE_PNG)
         .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"result." + result.getFormat() + "\"")
         .body(resource);
+  }
+
+  @GetMapping("/resources/{resourceId}/base64")
+  public ApiResponse getResourceBase64(@PathVariable("resourceId") Long resourceId) throws Exception {
+    PlotResultResource result = sciDrawService.getResult(resourceId);
+    byte[] bytes = Files.readAllBytes(Paths.get(result.getStoragePath()));
+    String format = result.getFormat() == null || result.getFormat().trim().isEmpty() ? "png" : result.getFormat();
+    return ApiResponse.ok(new ResourceBase64Response(
+        result.getId(),
+        format,
+        "image/" + format,
+        Base64.getEncoder().encodeToString(bytes)));
   }
 
   @ExceptionHandler(Exception.class)
