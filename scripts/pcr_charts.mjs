@@ -12,6 +12,7 @@ function parseArgs(argv) {
   const args = { input: defaultInput, outDir: defaultOutDir };
   for (let i = 2; i < argv.length; i += 1) {
     const item = argv[i];
+    // R wrapper forwards --options; consume it so options.json is not treated as the data file.
     if (item === "--input") args.input = argv[++i];
     else if (item === "--output") args.output = argv[++i];
     else if (item === "--out-dir") args.outDir = argv[++i];
