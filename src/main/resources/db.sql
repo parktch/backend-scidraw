@@ -116,6 +116,15 @@ INSERT INTO `coupon_codes` (`code`, `total_times`, `expires_at`, `status`)
 VALUES ('SCIDRAW-DEMO', 3, DATE_ADD(NOW(), INTERVAL 30 DAY), 'ACTIVE')
 ON DUPLICATE KEY UPDATE `code`=`code`;
 
+INSERT INTO `coupon_codes` (`code`, `total_times`, `expires_at`, `status`)
+VALUES
+  ('SCIDRAW-20-7K4M2Q', 20, DATE_ADD(NOW(), INTERVAL 180 DAY), 'ACTIVE'),
+  ('SCIDRAW-20-P9X3LA', 20, DATE_ADD(NOW(), INTERVAL 180 DAY), 'ACTIVE'),
+  ('SCIDRAW-20-M6R8TN', 20, DATE_ADD(NOW(), INTERVAL 180 DAY), 'ACTIVE'),
+  ('SCIDRAW-20-H2V5CZ', 20, DATE_ADD(NOW(), INTERVAL 180 DAY), 'ACTIVE'),
+  ('SCIDRAW-20-Q8B1WY', 20, DATE_ADD(NOW(), INTERVAL 180 DAY), 'ACTIVE')
+ON DUPLICATE KEY UPDATE `code`=`code`;
+
 INSERT INTO `share_links` (`share_token`, `grant_times`, `max_redeems`, `expires_at`, `status`)
 VALUES ('share-demo-token', 1, 100, DATE_ADD(NOW(), INTERVAL 30 DAY), 'ACTIVE')
 ON DUPLICATE KEY UPDATE `share_token`=`share_token`;

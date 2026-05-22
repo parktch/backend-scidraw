@@ -11,6 +11,7 @@ import java.util.Map;
 public class SciDrawProperties {
   private String storageRoot = "/tmp/scidraw";
   private long maxUploadSizeBytes = 10 * 1024 * 1024;
+  private boolean accessControlEnabled = false;
   private String rscriptBinary = "Rscript";
   private long rscriptTimeoutSeconds = 60;
   private Map<String, String> scripts = new HashMap<>();

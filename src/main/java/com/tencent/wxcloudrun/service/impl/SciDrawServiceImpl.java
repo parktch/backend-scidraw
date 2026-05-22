@@ -122,13 +122,7 @@ public class SciDrawServiceImpl implements SciDrawService {
       if (!"SUCCESS".equals(upload.getParseStatus())) {
         throw new IllegalArgumentException("上传文件尚未解析成功");
       }
-      PlotAccess access = accessMapper.findByToken(required(accessToken, "accessToken 不能为空"));
-      if (access == null || !access.getUserId().equals(user.getId())) {
-        throw new IllegalArgumentException("作图权益无效");
-      }
-      if (accessMapper.consumeOne(accessToken, user.getId()) != 1) {
-        throw new IllegalArgumentException("作图权益已过期或剩余次数不足");
-      }
+      PlotAccess access = resolveAccess(user, accessToken);
 
       PlotTask task = createPendingTask(user, access, upload, plotType, outputFormat, optionsJson);
       scheduleTask(task.getId());
@@ -146,13 +140,7 @@ public class SciDrawServiceImpl implements SciDrawService {
     try {
       SciUser user = ensureUser(userKey);
       UploadedFile upload = saveUploadedFile(user, file, null, null);
-      PlotAccess access = accessMapper.findByToken(required(accessToken, "accessToken 不能为空"));
-      if (access == null || !access.getUserId().equals(user.getId())) {
-        throw new IllegalArgumentException("作图权益无效");
-      }
-      if (accessMapper.consumeOne(accessToken, user.getId()) != 1) {
-        throw new IllegalArgumentException("作图权益已过期或剩余次数不足");
-      }
+      PlotAccess access = resolveAccess(user, accessToken);
 
       PlotTask task = createPendingTask(user, access, upload, plotType, outputFormat, optionsJson);
       scheduleTask(task.getId());
@@ -210,6 +198,29 @@ public class SciDrawServiceImpl implements SciDrawService {
     access.setStatus("ACTIVE");
     accessMapper.insert(access);
     return new AccessResponse(access.getAccessToken(), grantTimes, grantTimes, expiresAt);
+  }
+
+  private PlotAccess resolveAccess(SciUser user, String accessToken) {
+    if (!properties.isAccessControlEnabled()) {
+      PlotAccess access = new PlotAccess();
+      access.setId(0L);
+      access.setUserId(user.getId());
+      access.setAccessToken("debug-access");
+      access.setSourceType("DEBUG");
+      access.setTotalTimes(999999);
+      access.setRemainingTimes(999999);
+      access.setStatus("ACTIVE");
+      return access;
+    }
+
+    PlotAccess access = accessMapper.findByToken(required(accessToken, "accessToken 不能为空"));
+    if (access == null || !access.getUserId().equals(user.getId())) {
+      throw new IllegalArgumentException("作图权益无效");
+    }
+    if (accessMapper.consumeOne(accessToken, user.getId()) != 1) {
+      throw new IllegalArgumentException("作图权益已过期或剩余次数不足");
+    }
+    return access;
   }
 
   private SciUser ensureUser(String userKey) {

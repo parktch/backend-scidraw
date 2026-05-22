@@ -32,6 +32,7 @@ mybatis:
 scidraw:
   storage-root: ${SCIDRAW_STORAGE_ROOT:/tmp/scidraw}
   max-upload-size-bytes: ${SCIDRAW_MAX_UPLOAD_SIZE_BYTES:10485760}
+  access-control-enabled: ${SCIDRAW_ACCESS_CONTROL_ENABLED:false}
   rscript-binary: ${SCIDRAW_RSCRIPT_BINARY:Rscript}
   rscript-timeout-seconds: ${SCIDRAW_RSCRIPT_TIMEOUT_SECONDS:60}
   scripts:
