@@ -112,7 +112,7 @@
 
 - `userKey`：用户标识，第一版可用微信 openid
 - `accessToken`：券码或分享链接兑换得到的权益凭证
-- `plotType`：默认 `volcano`，支持小程序中的 `volcano`、`heatmap`、`survival`、`boxplot`
+- `plotType`：默认 `volcano`，支持小程序中的 `volcano`、`heatmap`、`survival`、`boxplot`、`pcr`
 - `outputFormat`：默认 `png`
 - `options`：JSON 字符串，默认 `{}`
 - `file`：TXT、CSV、XLS、XLSX 文件
@@ -153,6 +153,9 @@ Rscript scripts/plot_volcano.R --input /path/input.normalized.csv --output /path
 - `SCIDRAW_SCRIPT_HEATMAP`
 - `SCIDRAW_SCRIPT_SURVIVAL`
 - `SCIDRAW_SCRIPT_BOXPLOT`
+- `SCIDRAW_SCRIPT_PCR`
+
+PCR 作图入口为 `scripts/plot_pcr.R`，该脚本会调用 `scripts/pcr_charts.mjs` 生成合并 PNG；容器需安装 Node.js 和 `sharp`。
 
 ### `GET /api/count`
 

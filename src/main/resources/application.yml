@@ -31,3 +31,4 @@ scidraw:
     heatmap: ${SCIDRAW_SCRIPT_HEATMAP:scripts/plot_heatmap.R}
     survival: ${SCIDRAW_SCRIPT_SURVIVAL:scripts/plot_survival.R}
     boxplot: ${SCIDRAW_SCRIPT_BOXPLOT:scripts/plot_boxplot.R}
+    pcr: ${SCIDRAW_SCRIPT_PCR:scripts/plot_pcr.R}

@@ -26,7 +26,7 @@ import java.util.*;
 @Service
 public class SciDrawServiceImpl implements SciDrawService {
   private static final Set<String> ALLOWED_EXTENSIONS = new HashSet<String>(Arrays.asList("txt", "csv", "xls", "xlsx"));
-  private static final Set<String> SUPPORTED_PLOT_TYPES = new HashSet<String>(Arrays.asList("volcano", "heatmap", "survival", "boxplot"));
+  private static final Set<String> SUPPORTED_PLOT_TYPES = new HashSet<String>(Arrays.asList("volcano", "heatmap", "survival", "boxplot", "pcr"));
   private static final Set<String> SUPPORTED_OUTPUT_FORMATS = new HashSet<String>(Collections.singletonList("png"));
 
   private final SciUserMapper userMapper;
