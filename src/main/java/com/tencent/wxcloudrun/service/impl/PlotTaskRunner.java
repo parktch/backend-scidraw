@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 
 @Service
 public class PlotTaskRunner {
@@ -44,7 +43,7 @@ public class PlotTaskRunner {
 
       taskMapper.updateProgress(taskId, 30);
       Path output = storageService.resultPath(taskId, "result.png");
-      Path input = resolveInputPath(task, upload);
+      Path input = java.nio.file.Paths.get(upload.getNormalizedPath());
       Path workDir = output.getParent();
       rScriptExecutor.run(task.getPlotType(), input, output, optionsPath, workDir);
 
@@ -74,12 +73,5 @@ public class PlotTaskRunner {
       message = "作图任务执行失败";
     }
     return message.length() > 1000 ? message.substring(0, 1000) : message;
-  }
-
-  private Path resolveInputPath(PlotTask task, UploadedFile upload) {
-    if ("pcr".equalsIgnoreCase(task.getPlotType()) && upload.getStoragePath() != null && !upload.getStoragePath().trim().isEmpty()) {
-      return Paths.get(upload.getStoragePath());
-    }
-    return Paths.get(upload.getNormalizedPath());
   }
 }

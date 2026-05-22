@@ -19,18 +19,17 @@ script_dir <- function() {
 
 input <- read_arg("--input")
 output <- read_arg("--output")
-options_path <- read_arg("--options")
 
 node_script <- file.path(script_dir(), "pcr_charts.mjs")
 out_dir <- file.path(dirname(output), "pcr_charts")
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
+# PCR options are handled by the backend. The Node script only needs data/output paths.
 command <- c(
   node_script,
   "--input", input,
   "--out-dir", out_dir,
-  "--output", output,
-  "--options", options_path
+  "--output", output
 )
 
 result <- system2("node", command, stdout = TRUE, stderr = TRUE)
