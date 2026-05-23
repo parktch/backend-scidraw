@@ -243,6 +243,26 @@ function parseChartData(rows) {
   return parseTwoBlockGeneFormat(rows);
 }
 
+async function parseChartDataWithFallback(input) {
+  const rows = await loadRows(input);
+  const chartData = parseChartData(rows);
+  if (chartData.length > 0) return chartData;
+
+  const fallbackRows = await loadNormalizedFallbackRows(input);
+  if (!fallbackRows) return chartData;
+  return parseChartData(fallbackRows);
+}
+
+async function loadNormalizedFallbackRows(input) {
+  const normalized = path.join(path.dirname(input), "input.normalized.csv");
+  try {
+    await fs.access(normalized);
+    return parseDelimited(await fs.readFile(normalized, "utf8"));
+  } catch (error) {
+    return null;
+  }
+}
+
 function parseStandardGroupedFormat(rows) {
   const header = rows[0].map((item) => String(item).trim().toLowerCase());
   const markerIndex = header.indexOf("marker");
@@ -281,23 +301,26 @@ function parseTwoBlockGeneFormat(rows) {
 
   for (let r = 0; r < rows.length; r += 1) {
     const row = rows[r] || [];
-    const headers = row
-      .map((value, col) => ({ value, col }))
-      .filter(({ value }) => typeof value === "string" && value.trim());
-    if (headers.length < 2) continue;
+    const headerColumns = markerHeaderColumns(row);
+    if (headerColumns.length === 0) continue;
 
+    const groupColumn = headerColumns[0] > 0 ? headerColumns[0] - 1 : 0;
     for (let dataRowIndex = r + 1; dataRowIndex < rows.length; dataRowIndex += 1) {
       const dataRow = rows[dataRowIndex] || [];
-      const group = dataRow[1];
-      if (typeof group !== "string" || !group.trim()) break;
+      const group = textCell(dataRow[groupColumn]);
+      if (!group || markerHeaderColumns(dataRow).length > 0) break;
 
-      for (const { value: gene, col } of headers) {
-        const values = [dataRow[col], dataRow[col + 1], dataRow[col + 2]]
-          .map(numericCell)
-          .filter((cell) => Number.isFinite(cell));
+      for (let headerIndex = 0; headerIndex < headerColumns.length; headerIndex += 1) {
+        const markerColumn = headerColumns[headerIndex];
+        const nextMarkerColumn = headerIndex + 1 < headerColumns.length ? headerColumns[headerIndex + 1] : maxColumns(rows);
+        const values = [];
+        for (let valueColumn = markerColumn; valueColumn < nextMarkerColumn; valueColumn += 1) {
+          const value = numericCell(dataRow[valueColumn]);
+          if (Number.isFinite(value)) values.push(value);
+        }
         if (values.length < 2) continue;
-        const geneName = gene.trim();
-        const groupName = group.trim();
+        const geneName = textCell(row[markerColumn]);
+        const groupName = group;
         if (!geneMap.has(geneName)) {
           geneMap.set(geneName, new Map());
           geneOrder.push(geneName);
@@ -317,6 +340,30 @@ function parseTwoBlockGeneFormat(rows) {
       groups: labels.map((label) => ({ label, values: groupMap.get(label) })),
     };
   });
+}
+
+function maxColumns(rows) {
+  return rows.reduce((max, row) => Math.max(max, row ? row.length : 0), 0);
+}
+
+function markerHeaderColumns(row) {
+  const columns = [];
+  for (let i = 0; i < row.length; i += 1) {
+    const value = textCell(row[i]);
+    if (!value) continue;
+    if (!isNumericCell(row[i]) && (i === 0 || !textCell(row[i - 1])) && !isNumericCell(row[i + 1])) {
+      columns.push(i);
+    }
+  }
+  return columns;
+}
+
+function isNumericCell(value) {
+  return Number.isFinite(numericCell(value));
+}
+
+function textCell(value) {
+  return String(value ?? "").trim();
 }
 
 function orderedGroupLabels(groupMap) {
@@ -455,8 +502,7 @@ async function writeChart(data, outDir) {
 const args = parseArgs(process.argv);
 if (!args.input) throw new Error("缺少输入文件");
 await fs.mkdir(args.outDir, { recursive: true });
-const rows = await loadRows(args.input);
-const chartData = parseChartData(rows);
+const chartData = await parseChartDataWithFallback(args.input);
 if (chartData.length === 0) throw new Error("没有识别到 iNOS/CD86/CD206/TGF-β 这类双块多基因数据。");
 
 const results = [];
